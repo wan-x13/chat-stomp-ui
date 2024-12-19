@@ -21,7 +21,7 @@ const ChatPage = ({ token, username , schoolId }) => {
       debug: function (str) {  
         console.log(str);  
       },  
-      webSocketFactory: () => new SockJS("https://bmlsms-k12-testnet-api.azurewebsites.net/ws"),  
+      webSocketFactory: () => new SockJS("http://localhost:8080/ws"),  
       onConnect: () => {  
         console.log("WebSocket connected");  
 
