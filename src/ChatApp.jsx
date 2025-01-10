@@ -2,49 +2,68 @@ import React, { useState, useEffect } from "react";
 import { Client } from "@stomp/stompjs";  
 import SockJS from "sockjs-client";  
 
-const ChatPage = ({ token, username , schoolId }) => {  
+const ChatPage = ({ token, username, schoolId }) => {  
   const [onlineUsers, setOnlineUsers] = useState([]);  
   const [messages, setMessages] = useState([]);  
   const [currentMessage, setCurrentMessage] = useState("");  
   const [recipient, setRecipient] = useState("");  
   const client = React.useRef(null);  
 
-  console.log("school id is ", schoolId);
-
   useEffect(() => {  
     // Initialisation de WebSocket  
     client.current = new Client({  
       brokerURL: "ws://localhost:8080/ws",  
       connectHeaders: {  
-        Authorization: `Bearer ${token}`,  
+        Authorization: `Bearer ${token}`, 
+        "Portal": "Staff" 
       },  
       debug: function (str) {  
         console.log(str);  
       },  
       webSocketFactory: () => new SockJS("http://localhost:8080/ws"),  
       onConnect: () => {  
-        console.log("WebSocket connected");  
+        console.log("WebSocket connecté");  
 
-        // S'abonner aux utilisateurs en ligne  
-        client.current.subscribe("/topic/online-users/"+schoolId, (message) => {  
-          console.log("Received online users:", message.body);  
-          setOnlineUsers(JSON.parse(message.body));  
-        });  
+        const fetchOnlineUsers = async () => {  
+          try {  
+            const response = await fetch(`http://localhost:8080/api/v1/users/accounts/school/${schoolId}`, {  
+              method: "GET",  
+              headers: {  
+                "Content-Type": "application/json",  
+                Authorization: `Bearer ${token}`,  
+                Portal: "Staff"
+              },  
+            });  
+            const data = await response.json();  
+            setOnlineUsers(data);  
+            console.log("Utilisateurs en ligne :", data);  
+          } catch (error) {  
+            console.error("Erreur lors de la récupération des utilisateurs en ligne :", error);  
+          }  
+        };  
+
+        fetchOnlineUsers();  
 
         // S'abonner aux messages privés  
         client.current.subscribe(`/user/${username}/private`, (message) => {  
-          const receivedMessage = JSON.parse(message.body);  
-          setMessages((prev) => [...prev, receivedMessage]);  
+          const data = JSON.parse(message.body);  
+          if (Array.isArray(data)) {  
+            // Si une liste de messages est reçue (réponse à get-private-messages)  
+            setMessages(data);  
+          } else {  
+            // Si un seul message est reçu (nouveau message)  
+            setMessages((prev) => [...prev, data]);  
+          }  
         });  
 
         // Récupération initiale des utilisateurs en ligne  
         client.current.publish({  
-          destination: "/app/online-users", 
-          body: JSON.stringify({schoolId: schoolId}) 
+          destination: "/app/online-users",  
+          body: JSON.stringify({ schoolId: schoolId }),  
         });  
       },  
       onDisconnect: () => {  
-        console.log("WebSocket disconnected");  
+        console.log("WebSocket déconnecté");  
       },  
     });  
 
@@ -53,10 +72,21 @@ const ChatPage = ({ token, username , schoolId }) => {
     return () => {  
       client.current.deactivate();  
     };  
-  }, [token]);  
+  }, [token, schoolId, username]);  
+
+  const getMessagesFunc = (receiverId) => {  
+    setRecipient(receiverId);  
+    setMessages([]); // Réinitialiser les messages avant de les récupérer  
+
+    client.current.publish({  
+      destination: "/app/get-private-messages", 
+
+      body: JSON.stringify({ receiverId: receiverId }),  
+    });  
+  };  
 
   const sendMessage = () => {  
-    if (!recipient || !currentMessage) {  
+    if (!recipient || !currentMessage.trim()) {  
       alert("Veuillez sélectionner un destinataire et saisir un message");  
       return;  
     }  
@@ -64,30 +94,32 @@ const ChatPage = ({ token, username , schoolId }) => {
     // Publier un message privé  
     const messageToSend = {  
       receiverId: recipient,  
-      content: currentMessage,  
+      content: currentMessage.trim(),  
     };  
 
     client.current.publish({  
-      destination: "/app/send-private-message",  
+      destination: "/app/send-private-message",
       body: JSON.stringify(messageToSend),  
     });  
 
     // Créer un message local pour l'affichage  
-    const message = {  
+    const localMessage = {  
       id: null, // L'ID sera généré par le backend  
-      content: currentMessage,  
-      sentDate: new Date().toISOString(), // Date actuelle  
-      isRead: false, // Par défaut, le message n'est pas lu  
-      senderId: null, // Vous pouvez ajouter l'ID de l'expéditeur si nécessaire  
-      receiverName: onlineUsers.find(user => user.id === recipient)?.username || '',  
+      content: currentMessage.trim(),  
+      sentDate: new Date().toISOString(),  
+      isRead: false,  
+      senderId: username, // Assurez-vous que `username` correspond à l'ID de l'expéditeur  
+      receiverName: onlineUsers.find((user) => user.id === recipient)?.username || "",  
       senderName: username,  
       receiverId: recipient,  
-      files: [], // Si vous avez des fichiers, gérez-les ici  
+      files: "",  
     };  
 
-    setMessages((prev) => [...prev, message]);  
+    setMessages((prev) => [...prev, localMessage]);  
     setCurrentMessage("");  
   };  
+
+  console.log(messages)
 
   return (  
     <div style={{ margin: "20px" }}>  
@@ -100,7 +132,12 @@ const ChatPage = ({ token, username , schoolId }) => {
           <ul>  
             {onlineUsers.map((user) => (  
               <li key={user.id}>  
-                <button onClick={() => setRecipient(user.id)}>  
+                <button  
+                  onClick={() => {  
+                    if (user.id === username) return; // Empêcher de cliquer sur soi-même  
+                    getMessagesFunc(user.id);  
+                  }}  
+                >  
                   {user.username === username ? `${username} (Vous)` : user.username}  
                 </button>  
               </li>  
@@ -109,23 +146,38 @@ const ChatPage = ({ token, username , schoolId }) => {
         </div>  
 
         {/* Section Chat */}  
-        <div>  
-          <h3>Chat avec : {recipient || "Personne"}</h3>  
-          <div style={{ border: "1px solid black", padding: "10px", height: "200px", overflowY: "auto" }}>  
-            {messages.map((message, index) => (  
-              <div key={index} style={{ margin: "10px 0" }}>  
-                <b>{message.senderName} :</b> {message.content}  
-              </div>  
-            ))}  
+        <div style={{ flex: 1 }}>  
+          <h3>Chat avec : {recipient ? onlineUsers.find((u) => u.id === recipient)?.username : "Personne"}</h3>  
+          <div  
+            style={{  
+              border: "1px solid black",  
+              padding: "10px",  
+              height: "300px",  
+              overflowY: "auto",  
+              // backgroundColor: "#f9f9f9",  
+            }}  
+          >  
+            {messages.length > 0 ? (  
+              messages.map((message, index) => (  
+                <div key={index} style={{ margin: "10px 0" }}>  
+                  <b>{message.senderName} :</b> {message.content}  
+                </div>  
+              ))  
+            ) : (  
+              <p>Aucun message. Commencez la conversation !</p>  
+            )}  
           </div>  
-          <div>  
+          <div style={{ marginTop: "10px" }}>  
             <input  
               type="text"  
               value={currentMessage}  
               onChange={(e) => setCurrentMessage(e.target.value)}  
-              placeholder="Ecrire un message..."  
+              placeholder="Écrire un message..."  
+              style={{ width: "80%", padding: "8px" }}  
             />  
-            <button onClick={sendMessage}>Envoyer</button>  
+            <button onClick={sendMessage} style={{ padding: "8px 16px", marginLeft: "10px" }}>  
+              Envoyer  
+            </button>  
           </div>  
         </div>  
       </div>  

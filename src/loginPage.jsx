@@ -4,7 +4,9 @@ import axios from "axios";
 const LoginPage = ({ onLoginSuccess }) => {  
   const [username, setUsername] = useState("");  
   const [password, setPassword] = useState("");  
-  const [error, setError] = useState("");  
+  const [error, setError] = useState(""); 
+  
+
 
   const handleSubmit = async (e) => {  
     e.preventDefault();  
@@ -12,9 +14,14 @@ const LoginPage = ({ onLoginSuccess }) => {
       const response = await axios.post("http://localhost:8080/api/v1/accounts/staffs/login", {  
         username,  
         password  
+      }, {
+        headers: {
+          "Content-Type": "application/json",
+          "Portal": "Staff"
+        }
       }); 
       
-      console.log("data : ",response.data);
+      console.log("data : ", response);
 
       const { account, school } = await response.data
 
