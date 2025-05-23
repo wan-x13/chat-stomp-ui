@@ -11,13 +11,14 @@ const LoginPage = ({ onLoginSuccess }) => {
   const handleSubmit = async (e) => {  
     e.preventDefault();  
     try {  
-      const response = await axios.post("http://localhost:8080/api/v1/accounts/staffs/login", {  
+      const response = await axios.post("https://bmlsms-k12-testnet-api.azurewebsites.net/api/v1/accounts/staffs/login", {  
         username,  
         password  
       }, {
         headers: {
           "Content-Type": "application/json",
-          "Portal": "Staff"
+          "Portal": "Staff",
+          "X-SMS-API-KEY": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
         }
       }); 
       
@@ -28,7 +29,7 @@ const LoginPage = ({ onLoginSuccess }) => {
       console.log(account);
 
       // Récupérer le token JWT et passer au parent la session utilisateur  
-      onLoginSuccess(account.token, username, school.id);  
+      onLoginSuccess(account.token, username, school.id, account.id);  
     } catch (err) {  
       setError("Nom d'utilisateur ou mot de passe incorrect");  
     }  

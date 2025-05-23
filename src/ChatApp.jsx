@@ -2,47 +2,33 @@ import React, { useState, useEffect } from "react";
 import { Client } from "@stomp/stompjs";  
 import SockJS from "sockjs-client";  
 
-const ChatPage = ({ token, username, schoolId }) => {  
+const ChatPage = ({ token, username, schoolId , id }) => {  
   const [onlineUsers, setOnlineUsers] = useState([]);  
   const [messages, setMessages] = useState([]);  
   const [currentMessage, setCurrentMessage] = useState("");  
   const [recipient, setRecipient] = useState("");  
+  const [unreadCounts, setUnreadCounts] = useState({});  
   const client = React.useRef(null);  
+  const [notification, setNotification] = useState([]);
 
   useEffect(() => {  
     // Initialisation de WebSocket  
     client.current = new Client({  
-      brokerURL: "ws://localhost:8080/ws",  
+      brokerURL: "wss://bmlsms-k12-testnet-api.azurewebsites.net/ws",  
       connectHeaders: {  
-        Authorization: `Bearer ${token}`, 
-        "Portal": "Staff" 
+        Authorization: `Bearer ${token}`,   
+        "Portal": "Staff",
+           "X-SMS-API-KEY": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"    
       },  
       debug: function (str) {  
         console.log(str);  
       },  
-      webSocketFactory: () => new SockJS("http://localhost:8080/ws"),  
+      webSocketFactory: () => new SockJS("https://bmlsms-k12-testnet-api.azurewebsites.net/ws"),  
       onConnect: () => {  
         console.log("WebSocket connecté");  
 
-        const fetchOnlineUsers = async () => {  
-          try {  
-            const response = await fetch(`http://localhost:8080/api/v1/users/accounts/school/${schoolId}`, {  
-              method: "GET",  
-              headers: {  
-                "Content-Type": "application/json",  
-                Authorization: `Bearer ${token}`,  
-                Portal: "Staff"
-              },  
-            });  
-            const data = await response.json();  
-            setOnlineUsers(data);  
-            console.log("Utilisateurs en ligne :", data);  
-          } catch (error) {  
-            console.error("Erreur lors de la récupération des utilisateurs en ligne :", error);  
-          }  
-        };  
-
-        fetchOnlineUsers();  
+        
+         
 
         // S'abonner aux messages privés  
         client.current.subscribe(`/user/${username}/private`, (message) => {  
@@ -53,7 +39,30 @@ const ChatPage = ({ token, username, schoolId }) => {
           } else {  
             // Si un seul message est reçu (nouveau message)  
             setMessages((prev) => [...prev, data]);  
+
+            // Mettre à jour le compte non lu pour l'expéditeur  
+            setUnreadCounts((prev) => ({  
+              ...prev,  
+              [data.senderId]: (prev[data.senderId] || 0) + 1  
+            }));  
           }  
+        });  
+
+        client.current.subscribe(`/topic/notifications/edb02584-740f-429c-88df-38983d647ad1`, (message) => {
+          const data = JSON.parse(message.body);
+          console.log("Notifications :", data);
+        }
+          )
+
+        // S'abonner aux comptes non lus  
+        client.current.subscribe(`/user/${username}/unread-count`, (message) => {  
+          const data = JSON.parse(message.body);  
+          console.log("unread-count",data);
+          const formattedCounts = {};  
+          for (const [senderId, count] of Object.entries(data)) {  
+            formattedCounts[senderId] = count;  
+          }  
+          setUnreadCounts(formattedCounts);  
         });  
 
         // Récupération initiale des utilisateurs en ligne  
@@ -69,6 +78,27 @@ const ChatPage = ({ token, username, schoolId }) => {
 
     client.current.activate();  
 
+    const fetchOnlineUsers = async () => {  
+          try {  
+            const response = await fetch(`http://localhost:8080/api/v1/user-messagings/school?schoolId=${schoolId}`, {  
+              method: "GET",  
+              headers: {  
+                "Content-Type": "application/json",  
+                Authorization: `Bearer ${token}`,  
+                Portal: "Staff" ,
+                "X-SMS-API-KEY": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" 
+              },  
+            });  
+            const data = await response.json();  
+            setOnlineUsers(data);  
+            console.log("Utilisateurs en ligne :", data);  
+          } catch (error) {  
+            console.error("Erreur lors de la récupération des utilisateurs en ligne :", error);  
+          }  
+        }
+
+        fetchOnlineUsers(); 
+
     return () => {  
       client.current.deactivate();  
     };  
@@ -79,10 +109,12 @@ const ChatPage = ({ token, username, schoolId }) => {
     setMessages([]); // Réinitialiser les messages avant de les récupérer  
 
     client.current.publish({  
-      destination: "/app/get-private-messages", 
-
+      destination: "/app/get-private-messages",   
       body: JSON.stringify({ receiverId: receiverId }),  
     });  
+
+    // Marquer les messages comme lus  
+    markMessagesAsRead(receiverId);  
   };  
 
   const sendMessage = () => {  
@@ -98,14 +130,14 @@ const ChatPage = ({ token, username, schoolId }) => {
     };  
 
     client.current.publish({  
-      destination: "/app/send-private-message",
+      destination: "/app/send-private-message",  
       body: JSON.stringify(messageToSend),  
     });  
 
     // Créer un message local pour l'affichage  
     const localMessage = {  
       id: null, // L'ID sera généré par le backend  
-      content: currentMessage.trim(),  
+      message: currentMessage.trim(),  
       sentDate: new Date().toISOString(),  
       isRead: false,  
       senderId: username, // Assurez-vous que `username` correspond à l'ID de l'expéditeur  
@@ -119,7 +151,23 @@ const ChatPage = ({ token, username, schoolId }) => {
     setCurrentMessage("");  
   };  
 
-  console.log(messages)
+  const markMessagesAsRead = (senderId) => {  
+    client.current.publish({  
+      destination: "/app/mark-as-read",  
+      body: JSON.stringify({  
+        senderId: senderId,  
+        receiverId: username, // Assurez-vous que `username` est l'ID de l'utilisateur receveur  
+      }),  
+    });  
+
+    // Mettre à jour localement le compte des messages non lus  
+    setUnreadCounts((prev) => ({  
+      ...prev,  
+      [senderId]: 0  
+    }));  
+  };  
+
+  console.log(messages)  
 
   return (  
     <div style={{ margin: "20px" }}>  
@@ -139,6 +187,9 @@ const ChatPage = ({ token, username, schoolId }) => {
                   }}  
                 >  
                   {user.username === username ? `${username} (Vous)` : user.username}  
+                  {unreadCounts[user.id] > 0 && (  
+                    <span className="unread-badge">{unreadCounts[user.id]}</span>  
+                  )}  
                 </button>  
               </li>  
             ))}  
@@ -158,9 +209,9 @@ const ChatPage = ({ token, username, schoolId }) => {
             }}  
           >  
             {messages.length > 0 ? (  
-              messages.map((message, index) => (  
+              messages.map((it, index) => (  
                 <div key={index} style={{ margin: "10px 0" }}>  
-                  <b>{message.senderName} :</b> {message.content}  
+                  <b>{it.senderName} :</b> {it.message}  
                 </div>  
               ))  
             ) : (  
